@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分け分けくん（名古屋市ごみ分別サポート）</title>
+  <!-- スマホのホーム画面追加用アイコン（画像ファイル不要のSVG埋め込み） -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23006644'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white'>♻️</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23006644'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white'>♻️</text></svg>">
+  <style>
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+      background-color: #f4f7f6;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 16px;
+      text-align: center;
+    }
+    header {
+      background-color: #006644;
+      color: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    header p {
+      margin: 4px 0 0;
+      font-size: 16px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-width: 500px;
+      margin: 0 auto 20px;
+    }
+    .voice-selector {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .voice-opt {
+      flex: 1;
+      padding: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      border: 2px solid #006644;
+      border-radius: 8px;
+      background: white;
+      color: #006644;
+      cursor: pointer;
+    }
+    .voice-opt.active {
+      background: #006644;
+      color: white;
+    }
+    .camera-btn {
+      display: block;
+      width: 100%;
+      background-color: #ff6b00;
+      color: white;
+      font-size: 24px;
+      font-weight: bold;
+      padding: 22px 10px;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #cc5500;
+      margin-bottom: 12px;
+      box-sizing: border-box;
+    }
+    .camera-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #cc5500;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    #preview {
+      max-width: 100%;
+      max-height: 240px;
+      border-radius: 10px;
+      margin-top: 12px;
+      display: none;
+    }
+    #loading {
+      display: none;
+      font-size: 22px;
+      font-weight: bold;
+      color: #006644;
+      margin: 20px 0;
+    }
+    #result-area {
+      display: none;
+      text-align: left;
+      border-top: 3px solid #006644;
+      padding-top: 16px;
+      margin-top: 16px;
+    }
+    .badge {
+      display: inline-block;
+      background-color: #e6f4ea;
+      color: #006644;
+      font-size: 22px;
+      font-weight: bold;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 2px solid #006644;
+      margin-bottom: 12px;
+    }
+    .item-name {
+      font-size: 26px;
+      font-weight: bold;
+      margin: 0 0 10px;
+    }
+    .guide-text {
+      font-size: 20px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .speak-btn {
+      width: 100%;
+      background-color: #0055aa;
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
+      padding: 16px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-bottom: 12px;
+    }
+    .source-link {
+      font-size: 14px;
+      color: #555;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>分け分けくん</h1>
+    <p>名古屋市 ごみ分別サポート</p>
+  </header>
+
+  <div class="card">
+    <div class="voice-selector">
+      <button type="button" id="btn-female" class="voice-opt active" onclick="setGender('female')">👩 女性の声</button>
+      <button type="button" id="btn-male" class="voice-opt" onclick="setGender('male')">👨 男性の声</button>
+    </div>
+
+    <p style="font-size: 18px; margin-top: 0;">ごみをカメラでうつすと、分別方法をお知らせします。</p>
+    
+    <label for="cameraInput" class="camera-btn">
+      📷 カメラでうつす<br><span style="font-size: 16px; font-weight: normal;">（または写真を選ぶ）</span>
+    </label>
+    <input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+    <img id="preview" alt="撮影した写真">
+    <div id="loading">🔍 調べています...<br>そのままお待ちください</div>
+
+    <div id="result-area">
+      <div class="item-name" id="item-name"></div>
+      <div class="badge" id="category-badge"></div>
+      <div class="guide-text" id="guide-text"></div>
+      
+      <button class="speak-btn" onclick="speakResult()">🔊 もう一度 声で聞く</button>
+      
+      <div class="source-link">
+        出典：<a id="source-url" href="#" target="_blank" rel="noopener">名古屋市公式ウェブサイト</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ★ここに発行したLambdaの「関数 URL」を貼り付けてください★
+    const API_URL = "https://fsyn43q3v2noqjsh4mb2rovb7q0xlofp.lambda-url.us-east-1.on.aws/";
+
+    let currentSpeechText = "";
+    let selectedGender = "female";
+    let femaleVoice = null;
+    let maleVoice = null;
+
+    function loadJapaneseVoices() {
+      const voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes("ja"));
+      if (voices.length === 0) return;
+
+      const femaleNames = ["Nanami", "Kyoko", "O-Ren", "Haruka", "Ayumi", "Google 日本語"];
+      for (const name of femaleNames) {
+        const found = voices.find(v => v.name.includes(name));
+        if (found) { femaleVoice = found; break; }
+      }
+      if (!femaleVoice) femaleVoice = voices[0];
+
+      const maleNames = ["Keita", "Otoya", "Ichiro", "Hattori"];
+      for (const name of maleNames) {
+        const found = voices.find(v => v.name.includes(name));
+        if (found) { maleVoice = found; break; }
+      }
+    }
+
+    window.speechSynthesis.onvoiceschanged = loadJapaneseVoices;
+    loadJapaneseVoices();
+
+    function setGender(gender) {
+      selectedGender = gender;
+      document.getElementById("btn-female").classList.toggle("active", gender === "female");
+      document.getElementById("btn-male").classList.toggle("active", gender === "male");
+      if (currentSpeechText) speakResult();
+    }
+
+    document.getElementById("cameraInput").addEventListener("change", function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const preview = document.getElementById("preview");
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        preview.src = e.target.result;
+        preview.style.display = "block";
+        resizeAndSendImage(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function resizeAndSendImage(dataUrl) {
+      document.getElementById("loading").style.display = "block";
+      document.getElementById("result-area").style.display = "none";
+
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const resizedBase64 = canvas.toDataURL("image/jpeg", 0.8);
+        sendToAws(resizedBase64);
+      };
+      img.src = dataUrl;
+    }
+
+    async function sendToAws(base64Image) {
+      try {
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64Image })
+        });
+
+        const data = await response.json();
+        document.getElementById("loading").style.display = "none";
+
+        if (data.status === "success" || data.status === "test_mode") {
+          const res = data.result;
+          document.getElementById("item-name").textContent = "品目：" + res.item_jp;
+          document.getElementById("category-badge").textContent = res.category;
+          document.getElementById("guide-text").textContent = res.guide;
+          document.getElementById("source-url").href = res.url;
+          
+          document.getElementById("result-area").style.display = "block";
+
+          currentSpeechText = data.speech_text;
+          speakResult();
+        } else {
+          alert("エラーが発生しました: " + (data.message || "不明なエラー"));
+        }
+      } catch (err) {
+        document.getElementById("loading").style.display = "none";
+        alert("通信エラーが発生しました。\n" + err);
+      }
+    }
+
+    // 読み上げ時にエンジンが誤読しやすい漢字・記号を自然な日本語読みに自動変換する
+    function normalizeForJapaneseSpeech(text) {
+      return text
+        .replace(/（/g, "、")
+        .replace(/）/g, "、")
+        .replace(/『|』/g, "")
+        .replace(/分別区分/g, "ぶんべつくぶん")
+        .replace(/資源/g, "しげん")
+        .replace(/可燃/g, "かねん")
+        .replace(/不燃/g, "ふねん")
+        .replace(/容器包装/g, "ようきほうそう")
+        .replace(/回収/g, "かいしゅう")
+        .replace(/環境事業所/g, "かんきょうじぎょうしょ");
+    }
+
+    function speakResult() {
+      if (!currentSpeechText) return;
+      window.speechSynthesis.cancel();
+      loadJapaneseVoices();
+
+      const cleanText = normalizeForJapaneseSpeech(currentSpeechText);
+      const sentences = cleanText.split("。").filter(s => s.trim().length > 0);
+      let index = 0;
+
+      function speakNext() {
+        if (index >= sentences.length) return;
+
+        const uttr = new SpeechSynthesisUtterance(sentences[index] + "。");
+        uttr.lang = "ja-JP";
+        uttr.rate = 0.92;
+
+        if (selectedGender === "male") {
+          if (maleVoice) {
+            uttr.voice = maleVoice;
+            uttr.pitch = 1.0;
+          } else {
+            if (femaleVoice) uttr.voice = femaleVoice;
+            uttr.pitch = 0.75;
+          }
+        } else {
+          if (femaleVoice) uttr.voice = femaleVoice;
+          uttr.pitch = 1.05;
+        }
+
+        uttr.onend = function() {
+          index++;
+          speakNext();
+        };
+
+        window.speechSynthesis.speak(uttr);
+      }
+
+      speakNext();
+    }
+  </script>
+
+</body>
+</html>
