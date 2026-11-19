@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>分け分けくん（名古屋市ごみ分別サポート）</title>
   <!-- スマホのホーム画面追加用アイコン（画像ファイル不要のSVG埋め込み） -->
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23006644'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white'>♻️</text></svg>">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23006644'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white'>♻️</text></svg>">
+  <link rel="apple-touch-icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23006644'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white'>♻️</text></svg>">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23006644'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white'>♻️</text></svg>">
   <style>
     body {
       font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
@@ -16,6 +19,7 @@
       padding: 16px;
       text-align: center;
     }
+
     header {
       background-color: #006644;
       color: white;
@@ -23,28 +27,33 @@
       border-radius: 12px;
       margin-bottom: 20px;
     }
+
     header h1 {
       margin: 0;
       font-size: 28px;
     }
+
     header p {
       margin: 4px 0 0;
       font-size: 16px;
     }
+
     .card {
       background: white;
       border-radius: 16px;
       padding: 20px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       max-width: 500px;
       margin: 0 auto 20px;
     }
+
     .voice-selector {
       display: flex;
       justify-content: center;
       gap: 10px;
       margin-bottom: 16px;
     }
+
     .voice-opt {
       flex: 1;
       padding: 10px;
@@ -56,10 +65,12 @@
       color: #006644;
       cursor: pointer;
     }
+
     .voice-opt.active {
       background: #006644;
       color: white;
     }
+
     .camera-btn {
       display: block;
       width: 100%;
@@ -75,13 +86,16 @@
       margin-bottom: 12px;
       box-sizing: border-box;
     }
+
     .camera-btn:active {
       transform: translateY(2px);
       box-shadow: 0 2px 0 #cc5500;
     }
+
     input[type="file"] {
       display: none;
     }
+
     #preview {
       max-width: 100%;
       max-height: 240px;
@@ -89,6 +103,7 @@
       margin-top: 12px;
       display: none;
     }
+
     #loading {
       display: none;
       font-size: 22px;
@@ -96,6 +111,7 @@
       color: #006644;
       margin: 20px 0;
     }
+
     #result-area {
       display: none;
       text-align: left;
@@ -103,6 +119,7 @@
       padding-top: 16px;
       margin-top: 16px;
     }
+
     .badge {
       display: inline-block;
       background-color: #e6f4ea;
@@ -114,16 +131,19 @@
       border: 2px solid #006644;
       margin-bottom: 12px;
     }
+
     .item-name {
       font-size: 26px;
       font-weight: bold;
       margin: 0 0 10px;
     }
+
     .guide-text {
       font-size: 20px;
       line-height: 1.6;
       margin-bottom: 16px;
     }
+
     .speak-btn {
       width: 100%;
       background-color: #0055aa;
@@ -136,6 +156,7 @@
       cursor: pointer;
       margin-bottom: 12px;
     }
+
     .source-link {
       font-size: 14px;
       color: #555;
@@ -143,6 +164,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <header>
@@ -157,7 +179,7 @@
     </div>
 
     <p style="font-size: 18px; margin-top: 0;">ごみをカメラでうつすと、分別方法をお知らせします。</p>
-    
+
     <label for="cameraInput" class="camera-btn">
       📷 カメラでうつす<br><span style="font-size: 16px; font-weight: normal;">（または写真を選ぶ）</span>
     </label>
@@ -170,9 +192,9 @@
       <div class="item-name" id="item-name"></div>
       <div class="badge" id="category-badge"></div>
       <div class="guide-text" id="guide-text"></div>
-      
+
       <button class="speak-btn" onclick="speakResult()">🔊 もう一度 声で聞く</button>
-      
+
       <div class="source-link">
         出典：<a id="source-url" href="#" target="_blank" rel="noopener">名古屋市公式ウェブサイト</a>
       </div>
@@ -180,7 +202,6 @@
   </div>
 
   <script>
-    // ★ここに発行したLambdaの「関数 URL」を貼り付けてください★
     const API_URL = "https://5a426dcvlvn6sqeo3563e4umji0dpmds.lambda-url.ap-northeast-1.on.aws/";
 
     let currentSpeechText = "";
@@ -189,25 +210,28 @@
     let maleVoice = null;
 
     function loadJapaneseVoices() {
-      const voices = window.speechSynthesis.getVoices().filter(v => v.lang.includes("ja"));
-      if (voices.length === 0) return;
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
 
-      const femaleNames = ["Nanami", "Kyoko", "O-Ren", "Haruka", "Ayumi", "Google 日本語"];
-      for (const name of femaleNames) {
-        const found = voices.find(v => v.name.includes(name));
-        if (found) { femaleVoice = found; break; }
-      }
-      if (!femaleVoice) femaleVoice = voices[0];
+      const jpVoices = voices.filter(v => v.lang === "ja-JP" || v.lang === "ja_JP" || v.lang.includes("ja"));
+      if (!jpVoices.length) return;
 
-      const maleNames = ["Keita", "Otoya", "Ichiro", "Hattori"];
-      for (const name of maleNames) {
-        const found = voices.find(v => v.name.includes(name));
-        if (found) { maleVoice = found; break; }
-      }
+      // 自然な女性音声を優先順位順に検索
+      femaleVoice =
+        jpVoices.find(v => /Nanami|Google 日本語|Kyoko|O-Ren|Haruka|Ayumi/i.test(v.name)) ||
+        jpVoices[0];
+
+      // 自然な男性音声を優先順位順に検索
+      maleVoice =
+        jpVoices.find(v => /Keita|Otoya|Hattori|Ichiro/i.test(v.name)) ||
+        jpVoices.find(v => v !== femaleVoice) ||
+        femaleVoice;
     }
 
-    window.speechSynthesis.onvoiceschanged = loadJapaneseVoices;
-    loadJapaneseVoices();
+    if ("speechSynthesis" in window) {
+      loadJapaneseVoices();
+      window.speechSynthesis.onvoiceschanged = loadJapaneseVoices;
+    }
 
     function setGender(gender) {
       selectedGender = gender;
@@ -216,13 +240,13 @@
       if (currentSpeechText) speakResult();
     }
 
-    document.getElementById("cameraInput").addEventListener("change", function(event) {
+    document.getElementById("cameraInput").addEventListener("change", function (event) {
       const file = event.target.files[0];
       if (!file) return;
 
       const preview = document.getElementById("preview");
       const reader = new FileReader();
-      reader.onload = function(e) {
+      reader.onload = function (e) {
         preview.src = e.target.result;
         preview.style.display = "block";
         resizeAndSendImage(e.target.result);
@@ -235,7 +259,7 @@
       document.getElementById("result-area").style.display = "none";
 
       const img = new Image();
-      img.onload = function() {
+      img.onload = function () {
         const canvas = document.createElement("canvas");
         const MAX_WIDTH = 800;
         let width = img.width;
@@ -272,14 +296,26 @@
           document.getElementById("item-name").textContent = "品目：" + res.item_jp;
           document.getElementById("category-badge").textContent = res.category;
           document.getElementById("guide-text").textContent = res.guide;
-          document.getElementById("source-url").href = res.url;
-          
+          document.getElementById("source-url").href = res.url || "https://www.city.nagoya.jp/kurashi/category/5-4-0-0-0-0-0-0-0-0.html";
+
           document.getElementById("result-area").style.display = "block";
 
-          currentSpeechText = data.speech_text;
+          // speech_text が返ってこない形式にも対応できるようフォールバックを用意
+          currentSpeechText = data.speech_text || `${res.item_jp}は、${res.category}です。${res.guide}`;
+          speakResult();
+        } else if (data.item) {
+          // LambdaがフラットなJSON（item, category, guide）を返した場合にも対応
+          document.getElementById("item-name").textContent = "品目：" + data.item;
+          document.getElementById("category-badge").textContent = data.category;
+          document.getElementById("guide-text").textContent = data.guide;
+          document.getElementById("source-url").href = "https://www.city.nagoya.jp/kurashi/category/5-4-0-0-0-0-0-0-0-0.html";
+
+          document.getElementById("result-area").style.display = "block";
+
+          currentSpeechText = `${data.item}は、${data.category}です。${data.guide}`;
           speakResult();
         } else {
-          alert("エラーが発生しました: " + (data.message || "不明なエラー"));
+          alert("エラーが発生しました: " + (data.message || data.error || "不明なエラー"));
         }
       } catch (err) {
         document.getElementById("loading").style.display = "none";
@@ -302,46 +338,44 @@
         .replace(/環境事業所/g, "かんきょうじぎょうしょ");
     }
 
+    // 二重敬語・壊れた語尾を修正する
+    function fixBrokenJapanese(text) {
+      return text
+        .replace(/ますです/g, "ます")
+        .replace(/ませんです/g, "ません")
+        .replace(/でしたです/g, "でした")
+        .replace(/くださいです/g, "ください")
+        .replace(/。。+/g, "。")
+        .trim();
+    }
+
     function speakResult() {
       if (!currentSpeechText) return;
       window.speechSynthesis.cancel();
-      loadJapaneseVoices();
 
-      const cleanText = normalizeForJapaneseSpeech(currentSpeechText);
-      const sentences = cleanText.split("。").filter(s => s.trim().length > 0);
-      let index = 0;
-
-      function speakNext() {
-        if (index >= sentences.length) return;
-
-        const uttr = new SpeechSynthesisUtterance(sentences[index] + "。");
-        uttr.lang = "ja-JP";
-        uttr.rate = 0.92;
-
-        if (selectedGender === "male") {
-          if (maleVoice) {
-            uttr.voice = maleVoice;
-            uttr.pitch = 1.0;
-          } else {
-            if (femaleVoice) uttr.voice = femaleVoice;
-            uttr.pitch = 0.75;
-          }
-        } else {
-          if (femaleVoice) uttr.voice = femaleVoice;
-          uttr.pitch = 1.05;
-        }
-
-        uttr.onend = function() {
-          index++;
-          speakNext();
-        };
-
-        window.speechSynthesis.speak(uttr);
+      if (!femaleVoice && !maleVoice) {
+        loadJapaneseVoices();
       }
 
-      speakNext();
+      let cleanText = normalizeForJapaneseSpeech(currentSpeechText);
+      cleanText = fixBrokenJapanese(cleanText);
+
+      const uttr = new SpeechSynthesisUtterance(cleanText);
+      uttr.lang = "ja-JP";
+      uttr.rate = 0.95;
+
+      if (selectedGender === "male" && maleVoice) {
+        uttr.voice = maleVoice;
+        uttr.pitch = (maleVoice === femaleVoice) ? 0.9 : 1.0;
+      } else if (femaleVoice) {
+        uttr.voice = femaleVoice;
+        uttr.pitch = 1.0;
+      }
+
+      window.speechSynthesis.speak(uttr);
     }
   </script>
 
 </body>
+
 </html>
