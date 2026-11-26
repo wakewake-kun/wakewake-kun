@@ -83,13 +83,36 @@
       border-radius: 14px;
       cursor: pointer;
       box-shadow: 0 4px 0 #cc5500;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
       box-sizing: border-box;
     }
 
     .camera-btn:active {
       transform: translateY(2px);
       box-shadow: 0 2px 0 #cc5500;
+    }
+
+    .photo-tips {
+      background-color: #f0f9f4;
+      border-left: 4px solid #006644;
+      border-radius: 8px;
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 15px;
+      line-height: 1.5;
+      color: #1a3a2a;
+      margin-bottom: 8px;
+    }
+
+    .photo-tips strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #006644;
+    }
+
+    .photo-tips ul {
+      margin: 0;
+      padding-left: 20px;
     }
 
     input[type="file"] {
@@ -141,7 +164,22 @@
     .guide-text {
       font-size: 20px;
       line-height: 1.6;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
+    }
+
+    .points-list {
+      background-color: #fff8e7;
+      border: 1px solid #f0c36d;
+      border-radius: 8px;
+      padding: 12px 16px 12px 32px;
+      margin: 0 0 16px;
+      font-size: 17px;
+      line-height: 1.5;
+      display: none;
+    }
+
+    .points-list li {
+      margin-bottom: 4px;
     }
 
     .speak-btn {
@@ -155,6 +193,11 @@
       border-radius: 10px;
       cursor: pointer;
       margin-bottom: 12px;
+    }
+
+    .speak-btn:disabled {
+      background-color: #6c8eb5;
+      cursor: wait;
     }
 
     .source-link {
@@ -185,6 +228,14 @@
     </label>
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
 
+    <div class="photo-tips">
+      <strong>📸 きれいに判定するコツ</strong>
+      <ul>
+        <li><b>卵パックなどの透明ごみ</b>は、黒っぽい場所を避けて明るい机の上で撮ると見分けやすくなります。</li>
+        <li>容器の<b>「プラ」「紙」マーク</b>が写るように撮るとさらに正確です。</li>
+      </ul>
+    </div>
+
     <img id="preview" alt="撮影した写真">
     <div id="loading">🔍 調べています...<br>そのままお待ちください</div>
 
@@ -192,6 +243,7 @@
       <div class="item-name" id="item-name"></div>
       <div class="badge" id="category-badge"></div>
       <div class="guide-text" id="guide-text"></div>
+      <ul class="points-list" id="points-list"></ul>
 
       <button class="speak-btn" onclick="speakResult()">🔊 もう一度 声で聞く</button>
 
@@ -202,26 +254,30 @@
   </div>
 
   <script>
+    // ※新しい team2-wakewake-bedrock の関数 URL が発行されたら、ここに貼り替えてください
     const API_URL = "https://5a426dcvlvn6sqeo3563e4umji0dpmds.lambda-url.ap-northeast-1.on.aws/";
 
     let currentSpeechText = "";
     let selectedGender = "female";
+    let lastResizedBase64 = "";
+    let audioCache = { female: "", male: "" };
+    let currentAudio = null;
+
     let femaleVoice = null;
     let maleVoice = null;
 
     function loadJapaneseVoices() {
+      if (!("speechSynthesis" in window)) return;
       const voices = window.speechSynthesis.getVoices();
       if (!voices.length) return;
 
       const jpVoices = voices.filter(v => v.lang === "ja-JP" || v.lang === "ja_JP" || v.lang.includes("ja"));
       if (!jpVoices.length) return;
 
-      // 自然な女性音声を優先順位順に検索
       femaleVoice =
         jpVoices.find(v => /Nanami|Google 日本語|Kyoko|O-Ren|Haruka|Ayumi/i.test(v.name)) ||
         jpVoices[0];
 
-      // 自然な男性音声を優先順位順に検索
       maleVoice =
         jpVoices.find(v => /Keita|Otoya|Hattori|Ichiro/i.test(v.name)) ||
         jpVoices.find(v => v !== femaleVoice) ||
@@ -233,11 +289,21 @@
       window.speechSynthesis.onvoiceschanged = loadJapaneseVoices;
     }
 
-    function setGender(gender) {
+    async function setGender(gender) {
       selectedGender = gender;
       document.getElementById("btn-female").classList.toggle("active", gender === "female");
       document.getElementById("btn-male").classList.toggle("active", gender === "male");
-      if (currentSpeechText) speakResult();
+
+      if (!currentSpeechText) return;
+
+      // すでにその性別の Polly 音声をキャッシュ済みなら即再生
+      if (audioCache[gender]) {
+        speakResult();
+        return;
+      }
+
+      // 未取得の性別の場合、現在の読み上げ文だけを送って高速に Polly 音声を取得
+      await fetchPollyVoiceForCurrentText(gender);
     }
 
     document.getElementById("cameraInput").addEventListener("change", function (event) {
@@ -257,6 +323,7 @@
     function resizeAndSendImage(dataUrl) {
       document.getElementById("loading").style.display = "block";
       document.getElementById("result-area").style.display = "none";
+      stopCurrentAudio();
 
       const img = new Image();
       img.onload = function () {
@@ -275,9 +342,26 @@
         ctx.drawImage(img, 0, 0, width, height);
 
         const resizedBase64 = canvas.toDataURL("image/jpeg", 0.8);
+        lastResizedBase64 = resizedBase64;
+        audioCache = { female: "", male: "" };
         sendToAws(resizedBase64);
       };
       img.src = dataUrl;
+    }
+
+    function renderPoints(points) {
+      const listEl = document.getElementById("points-list");
+      listEl.innerHTML = "";
+      if (Array.isArray(points) && points.length > 0) {
+        points.forEach(pt => {
+          const li = document.createElement("li");
+          li.textContent = pt;
+          listEl.appendChild(li);
+        });
+        listEl.style.display = "block";
+      } else {
+        listEl.style.display = "none";
+      }
     }
 
     async function sendToAws(base64Image) {
@@ -285,34 +369,37 @@
         const response = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64Image })
+          body: JSON.stringify({
+            image: base64Image,
+            voice: selectedGender
+          })
         });
 
         const data = await response.json();
         document.getElementById("loading").style.display = "none";
 
-        if (data.status === "success" || data.status === "test_mode") {
-          const res = data.result;
-          document.getElementById("item-name").textContent = "品目：" + res.item_jp;
-          document.getElementById("category-badge").textContent = res.category;
-          document.getElementById("guide-text").textContent = res.guide;
-          document.getElementById("source-url").href = res.url || "https://www.city.nagoya.jp/kurashi/category/5-4-0-0-0-0-0-0-0-0.html";
+        const res = data.result || data;
+        const itemLabel = res.item_jp || res.item;
+
+        if (itemLabel) {
+          const guideLabel = res.guide || res.instruction || res.advice || res.reason || "";
+          const categoryLabel = res.category || "分別案内";
+          const pointsArray = res.points || data.points || [];
+          const audioB64 = data.audio_base64 || data.audioBase64 || res.audio_base64 || "";
+
+          document.getElementById("item-name").textContent = "品目：" + itemLabel;
+          document.getElementById("category-badge").textContent = categoryLabel;
+          document.getElementById("guide-text").textContent = guideLabel;
+          renderPoints(pointsArray);
+          document.getElementById("source-url").href =
+            res.url || data.url || "https://www.city.nagoya.jp/kurashi/category/5-4-0-0-0-0-0-0-0-0.html";
 
           document.getElementById("result-area").style.display = "block";
 
-          // speech_text が返ってこない形式にも対応できるようフォールバックを用意
-          currentSpeechText = data.speech_text || `${res.item_jp}は、${res.category}です。${res.guide}`;
-          speakResult();
-        } else if (data.item) {
-          // LambdaがフラットなJSON（item, category, guide）を返した場合にも対応
-          document.getElementById("item-name").textContent = "品目：" + data.item;
-          document.getElementById("category-badge").textContent = data.category;
-          document.getElementById("guide-text").textContent = data.guide;
-          document.getElementById("source-url").href = "https://www.city.nagoya.jp/kurashi/category/5-4-0-0-0-0-0-0-0-0.html";
-
-          document.getElementById("result-area").style.display = "block";
-
-          currentSpeechText = `${data.item}は、${data.category}です。${data.guide}`;
+          currentSpeechText = data.speech_text || `${itemLabel}は、${categoryLabel}です。${guideLabel}`;
+          if (audioB64) {
+            audioCache[selectedGender] = audioB64;
+          }
           speakResult();
         } else {
           alert("エラーが発生しました: " + (data.message || data.error || "不明なエラー"));
@@ -323,7 +410,47 @@
       }
     }
 
-    // 読み上げ時にエンジンが誤読しやすい漢字・記号を自然な日本語読みに自動変換する
+    async function fetchPollyVoiceForCurrentText(gender) {
+      const speakBtn = document.querySelector(".speak-btn");
+      const originalLabel = speakBtn.textContent;
+      speakBtn.textContent = "⏳ 音声を切り替えています...";
+      speakBtn.disabled = true;
+
+      try {
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "tts_only",
+            speech_text: currentSpeechText,
+            voice: gender
+          })
+        });
+        const data = await response.json();
+        const audioB64 = data.audio_base64 || data.audioBase64 || "";
+        if (audioB64) {
+          audioCache[gender] = audioB64;
+        }
+      } catch (e) {
+        console.warn("Polly音声の切替取得に失敗しました。ブラウザ音声を使用します:", e);
+      } finally {
+        speakBtn.textContent = originalLabel;
+        speakBtn.disabled = false;
+        speakResult();
+      }
+    }
+
+    function stopCurrentAudio() {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+      }
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    }
+
     function normalizeForJapaneseSpeech(text) {
       return text
         .replace(/（/g, "、")
@@ -338,7 +465,6 @@
         .replace(/環境事業所/g, "かんきょうじぎょうしょ");
     }
 
-    // 二重敬語・壊れた語尾を修正する
     function fixBrokenJapanese(text) {
       return text
         .replace(/ますです/g, "ます")
@@ -351,8 +477,20 @@
 
     function speakResult() {
       if (!currentSpeechText) return;
-      window.speechSynthesis.cancel();
+      stopCurrentAudio();
 
+      // 1. Amazon Polly の MP3 音声がある場合は最優先で再生
+      const pollyBase64 = audioCache[selectedGender];
+      if (pollyBase64) {
+        currentAudio = new Audio("data:audio/mp3;base64," + pollyBase64);
+        currentAudio.play().catch(err => {
+          console.warn("Polly音声の自動再生がブロックされました:", err);
+        });
+        return;
+      }
+
+      // 2. フォールバック：ブラウザ標準の Web Speech API
+      if (!("speechSynthesis" in window)) return;
       if (!femaleVoice && !maleVoice) {
         loadJapaneseVoices();
       }
