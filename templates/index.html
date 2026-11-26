@@ -47,10 +47,14 @@
       margin: 0 auto 20px;
     }
 
-    .voice-selector {
+    .selector-row {
       display: flex;
       justify-content: center;
       gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .selector-row:last-of-type {
       margin-bottom: 16px;
     }
 
@@ -68,6 +72,23 @@
 
     .voice-opt.active {
       background: #006644;
+      color: white;
+    }
+
+    .dialect-opt {
+      flex: 1;
+      padding: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      border: 2px solid #b45309;
+      border-radius: 8px;
+      background: white;
+      color: #b45309;
+      cursor: pointer;
+    }
+
+    .dialect-opt.active {
+      background: #b45309;
       color: white;
     }
 
@@ -216,9 +237,14 @@
   </header>
 
   <div class="card">
-    <div class="voice-selector">
+    <div class="selector-row">
       <button type="button" id="btn-female" class="voice-opt active" onclick="setGender('female')">👩 女性の声</button>
       <button type="button" id="btn-male" class="voice-opt" onclick="setGender('male')">👨 男性の声</button>
+    </div>
+
+    <div class="selector-row">
+      <button type="button" id="btn-standard" class="dialect-opt active" onclick="setDialect('standard')">🗾 標準語</button>
+      <button type="button" id="btn-nagoya" class="dialect-opt" onclick="setDialect('nagoya')">🏯 名古屋弁</button>
     </div>
 
     <p style="font-size: 18px; margin-top: 0;">ごみをカメラでうつすと、分別方法をお知らせします。</p>
@@ -256,10 +282,15 @@
   <script>
     const API_URL = "https://go6oluzfsij6oqtztenyvl5vtm0afuvf.lambda-url.ap-northeast-1.on.aws/";
 
-    let currentSpeechText = "";
     let selectedGender = "female";
-    let lastResizedBase64 = "";
-    let audioCache = { female: "", male: "" };
+    let selectedDialect = "standard";
+    let currentResultData = null;
+    let audioCache = {
+      standard_female: "",
+      standard_male: "",
+      nagoya_female: "",
+      nagoya_male: ""
+    };
     let currentAudio = null;
 
     let femaleVoice = null;
@@ -288,21 +319,50 @@
       window.speechSynthesis.onvoiceschanged = loadJapaneseVoices;
     }
 
+    function getActiveSpeechText() {
+      if (!currentResultData) return "";
+      return selectedDialect === "nagoya"
+        ? currentResultData.speechNagoya
+        : currentResultData.speechStandard;
+    }
+
+    function updateDisplayedResult() {
+      if (!currentResultData) return;
+      const isNagoya = selectedDialect === "nagoya";
+      document.getElementById("guide-text").textContent = isNagoya
+        ? currentResultData.guideNagoya
+        : currentResultData.guideStandard;
+      renderPoints(isNagoya ? currentResultData.pointsNagoya : currentResultData.pointsStandard);
+    }
+
     async function setGender(gender) {
       selectedGender = gender;
       document.getElementById("btn-female").classList.toggle("active", gender === "female");
       document.getElementById("btn-male").classList.toggle("active", gender === "male");
 
-      if (!currentSpeechText) return;
-
-      // すでにその性別の Polly 音声をキャッシュ済みなら即再生
-      if (audioCache[gender]) {
+      if (!currentResultData) return;
+      const cacheKey = `${selectedDialect}_${selectedGender}`;
+      if (audioCache[cacheKey]) {
         speakResult();
-        return;
+      } else {
+        await fetchPollyVoiceForCurrentText();
       }
+    }
 
-      // 未取得の性別の場合、現在の読み上げ文だけを送って高速に Polly 音声を取得
-      await fetchPollyVoiceForCurrentText(gender);
+    async function setDialect(dialect) {
+      selectedDialect = dialect;
+      document.getElementById("btn-standard").classList.toggle("active", dialect === "standard");
+      document.getElementById("btn-nagoya").classList.toggle("active", dialect === "nagoya");
+
+      if (!currentResultData) return;
+      updateDisplayedResult();
+
+      const cacheKey = `${selectedDialect}_${selectedGender}`;
+      if (audioCache[cacheKey]) {
+        speakResult();
+      } else {
+        await fetchPollyVoiceForCurrentText();
+      }
     }
 
     document.getElementById("cameraInput").addEventListener("change", function (event) {
@@ -341,8 +401,12 @@
         ctx.drawImage(img, 0, 0, width, height);
 
         const resizedBase64 = canvas.toDataURL("image/jpeg", 0.8);
-        lastResizedBase64 = resizedBase64;
-        audioCache = { female: "", male: "" };
+        audioCache = {
+          standard_female: "",
+          standard_male: "",
+          nagoya_female: "",
+          nagoya_male: ""
+        };
         sendToAws(resizedBase64);
       };
       img.src = dataUrl;
@@ -370,7 +434,8 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             image: base64Image,
-            voice: selectedGender
+            voice: selectedGender,
+            dialect: selectedDialect
           })
         });
 
@@ -381,26 +446,47 @@
         const itemLabel = res.item_jp || res.item;
 
         if (itemLabel) {
-          const guideLabel = res.guide || res.instruction || res.advice || res.reason || "";
           const categoryLabel = res.category || "分別案内";
-          const pointsArray = res.points || data.points || [];
-          const audioB64 = data.audio_base64 || data.audioBase64 || res.audio_base64 || "";
+          const guideStd = res.guide || res.instruction || res.advice || res.reason || "";
+          const pointsStd = res.points || data.points || [];
+          const guideNgy = res.guide_nagoya || guideStd;
+          const pointsNgy = res.points_nagoya || pointsStd;
+
+          currentResultData = {
+            item: itemLabel,
+            category: categoryLabel,
+            guideStandard: guideStd,
+            pointsStandard: pointsStd,
+            guideNagoya: guideNgy,
+            pointsNagoya: pointsNgy,
+            speechStandard: data.speech_text_standard || `${itemLabel}は、${categoryLabel}です。${guideStd}`,
+            speechNagoya: data.speech_text_nagoya || `${itemLabel}は、${categoryLabel}だがね。${guideNgy}`
+          };
 
           document.getElementById("item-name").textContent = "品目：" + itemLabel;
           document.getElementById("category-badge").textContent = categoryLabel;
-          document.getElementById("guide-text").textContent = guideLabel;
-          renderPoints(pointsArray);
+          updateDisplayedResult();
           document.getElementById("source-url").href =
             res.url || data.url || "https://www.city.nagoya.jp/kurashi/category/5-4-0-0-0-0-0-0-0-0.html";
 
           document.getElementById("result-area").style.display = "block";
 
-          currentSpeechText = data.speech_text || `${itemLabel}は、${categoryLabel}です。${guideLabel}`;
-          if (data.audio_female) audioCache.female = data.audio_female;
-          if (data.audio_male) audioCache.male = data.audio_male;
-          if (audioB64 && !audioCache[selectedGender]) {
-            audioCache[selectedGender] = audioB64;
+          // 4パターンの音声をキャッシュに保存
+          if (data.audios) {
+            audioCache = { ...audioCache, ...data.audios };
           }
+          if (data.audio_female && !audioCache.standard_female) {
+            audioCache.standard_female = data.audio_female;
+          }
+          if (data.audio_male && !audioCache.standard_male) {
+            audioCache.standard_male = data.audio_male;
+          }
+          const activeKey = `${selectedDialect}_${selectedGender}`;
+          const fallbackB64 = data.audio_base64 || data.audioBase64 || "";
+          if (fallbackB64 && !audioCache[activeKey]) {
+            audioCache[activeKey] = fallbackB64;
+          }
+
           speakResult();
         } else {
           alert("エラーが発生しました: " + (data.message || data.error || "不明なエラー"));
@@ -411,7 +497,10 @@
       }
     }
 
-    async function fetchPollyVoiceForCurrentText(gender) {
+    async function fetchPollyVoiceForCurrentText() {
+      const textToSpeak = getActiveSpeechText();
+      if (!textToSpeak) return;
+
       const speakBtn = document.querySelector(".speak-btn");
       const originalLabel = speakBtn.textContent;
       speakBtn.textContent = "⏳ 音声を切り替えています...";
@@ -423,17 +512,17 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mode: "tts_only",
-            speech_text: currentSpeechText,
-            voice: gender
+            speech_text: textToSpeak,
+            voice: selectedGender
           })
         });
         const data = await response.json();
         const audioB64 = data.audio_base64 || data.audioBase64 || "";
         if (audioB64) {
-          audioCache[gender] = audioB64;
+          audioCache[`${selectedDialect}_${selectedGender}`] = audioB64;
         }
       } catch (e) {
-        console.warn("Polly音声の切替取得に失敗しました。ブラウザ音声を使用します:", e);
+        console.warn("Polly音声の切替取得に失敗しました:", e);
       } finally {
         speakBtn.textContent = originalLabel;
         speakBtn.disabled = false;
@@ -477,11 +566,13 @@
     }
 
     function speakResult() {
-      if (!currentSpeechText) return;
+      const textToSpeak = getActiveSpeechText();
+      if (!textToSpeak) return;
       stopCurrentAudio();
 
       // 1. Amazon Polly の MP3 音声がある場合は最優先で再生
-      const pollyBase64 = audioCache[selectedGender];
+      const cacheKey = `${selectedDialect}_${selectedGender}`;
+      const pollyBase64 = audioCache[cacheKey];
       if (pollyBase64) {
         currentAudio = new Audio("data:audio/mp3;base64," + pollyBase64);
         currentAudio.play().catch(err => {
@@ -490,18 +581,18 @@
         return;
       }
 
-      // 2. フォールバック：ブラウザ標準の Web Speech API
+      // 2. フォールバック：ブラウザ標準の Web Speech API（こちらも少しゆっくりめに設定）
       if (!("speechSynthesis" in window)) return;
       if (!femaleVoice && !maleVoice) {
         loadJapaneseVoices();
       }
 
-      let cleanText = normalizeForJapaneseSpeech(currentSpeechText);
+      let cleanText = normalizeForJapaneseSpeech(textToSpeak);
       cleanText = fixBrokenJapanese(cleanText);
 
       const uttr = new SpeechSynthesisUtterance(cleanText);
       uttr.lang = "ja-JP";
-      uttr.rate = 0.95;
+      uttr.rate = 0.85;
 
       if (selectedGender === "male" && maleVoice) {
         uttr.voice = maleVoice;
