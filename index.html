@@ -501,7 +501,7 @@
 
   <div class="app-container">
     <header>
-      <div class="header-pill">♻️ AI ごみ分別サポート</div>
+      <div class="header-pill"> AI ごみ分別サポート</div>
       <h1>分け分けくん</h1>
       <p>名古屋市の分別ルールを写真と音声でご案内</p>
     </header>
@@ -638,19 +638,14 @@
 
       if (/プラスチック/.test(categoryLabel)) {
         badgeEl.classList.add("cat-plastic");
-        icon = "🧴";
       } else if (/可燃/.test(categoryLabel)) {
         badgeEl.classList.add("cat-burnable");
-        icon = "🔥";
       } else if (/不燃/.test(categoryLabel)) {
         badgeEl.classList.add("cat-nonburnable");
-        icon = "🛠️";
       } else if (/資源|紙製/.test(categoryLabel)) {
         badgeEl.classList.add("cat-resource");
-        icon = "📦";
       } else if (/有害|電池|粗大/.test(categoryLabel)) {
         badgeEl.classList.add("cat-hazardous");
-        icon = "⚠️";
       }
 
       badgeEl.textContent = `${icon} ${categoryLabel}`;
